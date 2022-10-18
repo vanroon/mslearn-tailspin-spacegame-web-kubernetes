@@ -35,7 +35,7 @@
 
         @* @if (Model.ErrorMessage == null)
         {
-            @* <!-- Start Leaderboard table --> 
+            @* <!-- Start Leaderboard table -->*@ 
             <div class="row">
                 <div class="col-sm-9 leader-scores">
                     <div class="row high-score hidden-xs">
@@ -192,10 +192,10 @@
                     </div>
                 </div>
             </div> 
-            @* <!-- End Leaderboard --> 
-         }
-        else
-        {*@ 
+         <!-- End Leaderboard --> 
+        @* } *@
+        @* else *@
+        @*{ 
              <div class="bg-warning text-left">
                 <h2>There was an error retrieving the leaderboard from the remote service.</h2>
                 <p>This is most likely due to one or more of the following reasons:</p>
@@ -214,7 +214,7 @@
                     }
                 </div>
             </div>
-        @* } *@
+        } *@
     </div>
 </section>
 
