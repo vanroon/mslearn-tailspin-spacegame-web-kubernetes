@@ -1,9 +1,12 @@
-trigger: none
+trigger: 
+- 'main'
 
 variables:
   buildConfiguration: 'Release'
+  leaderboardRepository: 'leaderboard'
   webRepository: 'web'
   tag: '$(Build.BuildId)'
+  imagePullSecret: 'secret'
 
 stages:
 - stage: 'Build'
@@ -15,7 +18,7 @@ stages:
       vmImage: 'ubuntu-20.04'
     steps:
     - task: Docker@2
-      displayName: 'Build and push the image to container registry'
+      displayName: 'Build and push the web image to container registry'
       inputs:
         command: buildAndPush
         buildContext: $(Build.Repository.LocalPath)
@@ -24,20 +27,61 @@ stages:
         containerRegistry: 'Container Registry Connection'
         tags: |
           $(tag)
+          latest
+
+    - task: Docker@2
+      displayName: 'Build and push the leaderboard image to container registry'
+      inputs:
+        command: buildAndPush
+        buildContext: $(Build.Repository.LocalPath)
+        repository: $(leaderboardRepository)
+        dockerfile: '$(Build.SourcesDirectory)/Tailspin.SpaceGame.LeaderboardContainer/Dockerfile'
+        containerRegistry: 'Container Registry Connection'
+        tags: |
+          $(tag)
+          latest
+    
+    - publish: '$(Build.SourcesDirectory)/manifests'
+      artifact: manifests
 
 - stage: 'Deploy'
   displayName: 'Deploy the container'
   dependsOn: Build
   jobs:
-  - job: 'Deploy'
+  - deployment: 'Deploy'
     displayName: 'Deploy job'
     pool:
       vmImage: 'ubuntu-20.04'
+    environment: 'spike.default'
     variables:
     - group: Release
-    steps:
-    - task: AzureWebAppContainer@1
-      inputs:
-       appName: $(WebAppName)
-       azureSubscription: 'Resource Manager - Tailspin - Space Game'
-       imageName: $(RegistryName)/$(webRepository):$(build.buildId)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: manifests
+
+          - task: KubernetesManifest@0
+            displayName: Create imagePullSecret
+            inputs:
+              action: createSecret
+              secretName: $(imagePullSecret)
+              dockerRegistryEndpoint: 'Container Registry Connection'
+              kubernetesServiceConnection: 'Kubernetes Cluster Connection'
+              namespace: 'default'
+
+          - task: KubernetesManifest@0
+            displayName: Deploy to Kubernetes Cluster
+            inputs: 
+              action: deploy
+              kubernetesServiceConnection: 'Kubernetes Cluster Connection'
+              namespace: 'default'
+              manifests: |
+                $(Pipeline.Workspace)/manifests/deployment.yml
+                $(Pipeline.Workspace)/manifests/service.yml
+              imagePullSecrets: |
+                $(imagePullSecret)
+              containers: | 
+                $(RegistryName)/$(webRepository):$(tag)
+                $(RegistryName)/$(leaderboardRepository):$(tag)
